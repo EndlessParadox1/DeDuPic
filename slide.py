@@ -33,7 +33,7 @@ def show_images(image_paths, delay=3):
                 root.geometry(f"{photo.width()}x{photo.height()}")
                 break  # 成功加载图片则跳出循环
             except (UnidentifiedImageError, OSError) as e:
-                print(f"跳过无法读取的图片: {img_path}")
+                print(f"无法读取图片: {img_path}", e)
                 image_paths.remove(img_path)
                 if not image_paths:
                     label.config(text="所有图片都无法读取")
