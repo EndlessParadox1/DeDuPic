@@ -12,47 +12,53 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model, preprocess = clip.load("ViT-B/16", device=device, jit=True)
+model, preprocess = clip.load("ViT-B/32", device=device, jit=True)
 
-def fetch_features(paths, batch_size):
+def get_views(img: Image.Image) -> list:
+    return [
+        img,
+        img.transpose(Image.FLIP_LEFT_RIGHT),
+        # img.transpose(Image.FLIP_TOP_BOTTOM),
+        # img.rotate(90),
+        # img.rotate(180),
+        # img.rotate(270),
+        # img.transpose(Image.FLIP_LEFT_RIGHT).rotate(90),
+        # img.transpose(Image.FLIP_LEFT_RIGHT).rotate(270),
+    ]
+
+def fetch_features(paths: list[str]) -> np.ndarray:
     features = []
-    batch = []
 
-    for path in tqdm(paths, desc="提取特征", unit="张图片"):
+    for i, path in enumerate(tqdm(paths, desc="提取特征", unit="张图片")):
         try:
-            img = preprocess(Image.open(path).convert("RGB"))
-            batch.append(img)
-            if len(batch) == batch_size:
-                with torch.no_grad():
-                    tensor = torch.stack(batch).to(device)
-                    batch_feat = model.encode_image(tensor).cpu().numpy()
-                    features.extend(batch_feat)
-                batch = []
+            img = Image.open(path).convert("RGB")
+            imgs = [preprocess(view) for view in get_views(img)]
+            with torch.no_grad():
+                tensor = torch.stack(imgs).to(device)  # [2, 3, 224, 224]
+                feat = model.encode_image(tensor).cpu().numpy()  # [2, 768]
+                features.append(feat)
         except Exception as e:
             print(f"读取失败：{path}", e)
 
-    if batch:
-        with torch.no_grad():
-            tensor = torch.stack(batch).to(device)
-            batch_feat = model.encode_image(tensor).cpu().numpy()
-            features.extend(batch_feat)
-
     return np.array(features)
 
-def extract_features_from_folder(folder_path, batch_size):
+def extract_features_from_folder(folder_path):
     paths = [os.path.join(folder_path, fname) for fname in os.listdir(folder_path)
                    if fname.lower().endswith((".jpg", ".jpeg", ".png"))]
-    features = fetch_features(paths, batch_size)
+    features = fetch_features(paths)
     return paths, features
 
 def cluster_similar_images(paths, features, threshold):
-    sim_matrix = cosine_similarity(features)
+    n = len(paths)
     G = nx.Graph()
+
     for idx, path in enumerate(paths):
         G.add_node(idx, path=path)
-    for i in range(len(paths)):
-        for j in range(i + 1, len(paths)):
-            if sim_matrix[i][j] >= threshold:
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            sim_matrix = cosine_similarity(features[i], features[j])
+            if np.any(sim_matrix >= threshold):
                 G.add_edge(i, j)
 
     clusters = []
@@ -62,12 +68,13 @@ def cluster_similar_images(paths, features, threshold):
             clusters.append(group)
     return clusters
 
+
 def confirm_and_delete_clusters(clusters, max_per_row=4):
     for k, group in enumerate(clusters):
         n = len(group)
         if n > 20:
             continue
-        print(f"第{k}组：共 {n} 张，点击你想要**删除**的图片")
+        print(f"第{k}组：共 {n} 张，点击你想要**删除**的图片, 按Enter/Space继续，按Esc退出")
 
         ncols = min(n, max_per_row)
         nrows = (n + ncols - 1) // ncols
@@ -135,12 +142,12 @@ def confirm_and_delete_clusters(clusters, max_per_row=4):
             except Exception as e:
                 print(f"删除失败：{path}", e)
 
-def main(folder_path, batch_size, threshold):
+def main(folder_path, threshold):
     if not os.path.exists(folder_path):
         print(f"文件夹不存在：{folder_path}")
         sys.exit(1)
 
-    paths, feats = extract_features_from_folder(folder_path, batch_size)
+    paths, feats = extract_features_from_folder(folder_path)
     print(f"共提取 {len(paths)} 张图片的特征")
 
     print("正在查找相似图片组...")
@@ -155,8 +162,7 @@ def main(folder_path, batch_size, threshold):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="图像去重")
     parser.add_argument("--folder", type=str, required=True, help="图片所在的文件夹路径")
-    parser.add_argument("--batch_size", type=int, default=16, help="批量处理的大小（默认 16）")
     parser.add_argument("--threshold", type=float, default=0.98, help="相似度阈值（默认 0.98）")
     args = parser.parse_args()
 
-    main(args.folder, args.batch_size, args.threshold)
+    main(args.folder, args.threshold)

@@ -23,5 +23,5 @@ def rename_files_in_folder(folder_path):
             print(f"文件 {filename} 已重命名为 {new_file_name}")
 
 # 示例：修改文件夹内所有文件名
-folder_path = "./Tina"  # 这里填写目标文件夹路径
+folder_path = "./images"  # 这里填写目标文件夹路径
 rename_files_in_folder(folder_path)
