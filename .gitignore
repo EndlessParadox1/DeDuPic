@@ -1,3 +1,5 @@
 .idea/
 .venv/
 yolo11l.pt
+build/
+dist/income.exe

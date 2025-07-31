@@ -3,9 +3,10 @@ import random
 from PIL import Image, ImageTk, UnidentifiedImageError
 import tkinter as tk
 
-# 设置图片文件夹路径
 IMAGE_FOLDER = r"./images"
-DELAY_SECONDS = 3  # 每张图显示秒数
+DELAY_SECONDS = 3
+MAX_WIDTH = 1600
+MAX_HEIGHT = 900
 
 def get_image_files(folder):
     exts = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
@@ -27,11 +28,12 @@ def show_images(image_paths, delay=3):
             img_path = random.choice(image_paths)
             try:
                 img = Image.open(img_path)
+                img.thumbnail((MAX_WIDTH, MAX_HEIGHT), Image.Resampling.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 label.config(image=photo)
                 label.image = photo
                 root.geometry(f"{photo.width()}x{photo.height()}")
-                break  # 成功加载图片则跳出循环
+                break
             except (UnidentifiedImageError, OSError) as e:
                 print(f"无法读取图片: {img_path}", e)
                 image_paths.remove(img_path)
